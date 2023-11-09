@@ -7,7 +7,7 @@ import * as argon from 'argon2';
 
 import { PrismaService } from 'src/prisma/prisma.service';
 import { AuthDto } from './dto';
-import { JwtResponseType } from 'types';
+import { jwtPayload } from './types';
 
 @Injectable({})
 export class AuthService {
@@ -17,7 +17,7 @@ export class AuthService {
     private config: ConfigService,
   ) {}
 
-  async signup(dto: AuthDto) {
+  async signup(dto: AuthDto): Promise<jwtPayload> {
     try {
       // create the hash password
       const hashedPwd = await argon.hash(dto.password);
@@ -30,8 +30,14 @@ export class AuthService {
         },
       });
 
-      return this.signToken(savedUser.id, savedUser.email);
+      // getting the access and refresh token using the User Id and Email
+      const tokens = await this.signTokens(savedUser.id, savedUser.email);
+      // updating the refresh token in the user object inside the database
+      await this.updateHashRT(savedUser.id, tokens.refresh_token);
+
+      return tokens;
     } catch (error) {
+      // returning the exception when there is already a user in the database
       if (error instanceof PrismaClientKnownRequestError) {
         if (error.code == 'P2002') {
           throw new ForbiddenException('User already exists in the Database.');
@@ -41,19 +47,44 @@ export class AuthService {
     }
   }
 
-  async signin(user: User) {
-    return this.signToken(user.id, user.email);
+  async signin(user: User): Promise<jwtPayload> {
+    // getting the access and refresh token using the User Id and Email
+    const tokens = await this.signTokens(user.id, user.email);
+    // updating the refresh token in the user object inside the database
+    await this.updateHashRT(user.id, tokens.refresh_token);
+    return tokens;
+  }
+
+  // add/update the Hash Refresh Token in the user object
+  async updateHashRT(userId: number, refreshToken: string): Promise<void> {
+    // hashing the Refresh Token
+    const hash = await argon.hash(refreshToken);
+
+    await this.prisma.user.update({
+      where: {
+        id: userId,
+      },
+      data: {
+        hashRT: hash,
+      },
+    });
   }
 
   // JWT signing function
-  async signToken(userId: number, userEmail: string): Promise<JwtResponseType> {
+  async signTokens(userId: number, userEmail: string): Promise<jwtPayload> {
     const payload = { sub: userId, email: userEmail };
 
-    const token = await this.jwt.signAsync(payload, {
-      expiresIn: '15m',
-      secret: this.config.get('JWT_SECRET'),
-    });
+    const [accessToken, refreshToken] = await Promise.all([
+      this.jwt.signAsync(payload, {
+        expiresIn: '15m',
+        secret: this.config.get<string>('JWT_AT_SECRET'),
+      }),
+      this.jwt.signAsync(payload, {
+        expiresIn: '7d',
+        secret: this.config.get<string>('JWT_RT_SECRET'),
+      }),
+    ]);
 
-    return { access_token: token };
+    return { access_token: accessToken, refresh_token: refreshToken };
   }
 }
