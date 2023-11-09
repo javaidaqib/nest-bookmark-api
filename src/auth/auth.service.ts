@@ -2,6 +2,7 @@ import { ForbiddenException, Injectable } from '@nestjs/common';
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
+import { User } from '@prisma/client';
 import * as argon from 'argon2';
 
 import { PrismaService } from 'src/prisma/prisma.service';
@@ -40,25 +41,7 @@ export class AuthService {
     }
   }
 
-  async signin(dto: AuthDto) {
-    // search for the user in the DB
-    const user = await this.prisma.user.findUnique({
-      where: {
-        email: dto.email,
-      },
-    });
-
-    // if not found then return an exception
-    if (!user) throw new ForbiddenException('User not found in the Database.');
-
-    // compare the user plain pwd with hashed pwd
-    const comparePwd = await argon.verify(user.password, dto.password);
-
-    // if not matched then return an exception
-    if (!comparePwd)
-      throw new ForbiddenException(
-        'There is an error in the entered credentials.',
-      );
+  async signin(user: User) {
     return this.signToken(user.id, user.email);
   }
 

@@ -9,7 +9,7 @@
     "prisma:dev:deploy": "prisma migrate deploy",
     "dev:db:rm": "docker compose rm dev-db -s -f -v",
     "dev:db:up": "docker compose up dev-db -d",
-    "dev:db:spawn": "npm run dev:db:rm && npm run dev:db:up && npm run prisma:dev:deploy",
+    "dev:db:spawn": "yarn dev:db:rm && yarn dev:db:up && yarn prisma:dev:deploy",
     "build": "nest build",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",
